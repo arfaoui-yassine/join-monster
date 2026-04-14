@@ -1,0 +1,53 @@
+{
+  "generatedAt": "2026-04-14T11:27:41.322Z",
+  "metrics": [
+    {
+      "scenario": "Over-fetching",
+      "label": "REST (over-fetching)",
+      "responseTimeMs": 54.628,
+      "httpRequests": 1,
+      "dbQueries": 1,
+      "payloadBytes": 248
+    },
+    {
+      "scenario": "Over-fetching",
+      "label": "GraphQL optimized",
+      "responseTimeMs": 41.933,
+      "httpRequests": 1,
+      "dbQueries": 1,
+      "payloadBytes": 120
+    },
+    {
+      "scenario": "Under-fetching",
+      "label": "REST (under-fetching)",
+      "responseTimeMs": 16.985,
+      "httpRequests": 4,
+      "dbQueries": 4,
+      "payloadBytes": 420
+    },
+    {
+      "scenario": "Under-fetching",
+      "label": "GraphQL optimized",
+      "responseTimeMs": 9.831,
+      "httpRequests": 1,
+      "dbQueries": 1,
+      "payloadBytes": 384
+    },
+    {
+      "scenario": "GraphQL N+1",
+      "label": "GraphQL naive (N+1)",
+      "responseTimeMs": 11.948,
+      "httpRequests": 1,
+      "dbQueries": 7,
+      "payloadBytes": 905
+    },
+    {
+      "scenario": "GraphQL N+1",
+      "label": "GraphQL optimized (Join Monster)",
+      "responseTimeMs": 8.714,
+      "httpRequests": 1,
+      "dbQueries": 1,
+      "payloadBytes": 905
+    }
+  ]
+}
