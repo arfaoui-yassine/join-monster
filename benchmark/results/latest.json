@@ -1,10 +1,10 @@
 {
-  "generatedAt": "2026-04-14T11:27:41.322Z",
+  "generatedAt": "2026-04-14T13:07:43.161Z",
   "metrics": [
     {
       "scenario": "Over-fetching",
       "label": "REST (over-fetching)",
-      "responseTimeMs": 54.628,
+      "responseTimeMs": 49.923,
       "httpRequests": 1,
       "dbQueries": 1,
       "payloadBytes": 248
@@ -12,7 +12,7 @@
     {
       "scenario": "Over-fetching",
       "label": "GraphQL optimized",
-      "responseTimeMs": 41.933,
+      "responseTimeMs": 41.746,
       "httpRequests": 1,
       "dbQueries": 1,
       "payloadBytes": 120
@@ -20,7 +20,7 @@
     {
       "scenario": "Under-fetching",
       "label": "REST (under-fetching)",
-      "responseTimeMs": 16.985,
+      "responseTimeMs": 15.933,
       "httpRequests": 4,
       "dbQueries": 4,
       "payloadBytes": 420
@@ -28,7 +28,7 @@
     {
       "scenario": "Under-fetching",
       "label": "GraphQL optimized",
-      "responseTimeMs": 9.831,
+      "responseTimeMs": 9.574,
       "httpRequests": 1,
       "dbQueries": 1,
       "payloadBytes": 384
@@ -36,15 +36,23 @@
     {
       "scenario": "GraphQL N+1",
       "label": "GraphQL naive (N+1)",
-      "responseTimeMs": 11.948,
+      "responseTimeMs": 16.06,
       "httpRequests": 1,
       "dbQueries": 7,
       "payloadBytes": 905
     },
     {
       "scenario": "GraphQL N+1",
+      "label": "GraphQL + DataLoader",
+      "responseTimeMs": 21.263,
+      "httpRequests": 1,
+      "dbQueries": 3,
+      "payloadBytes": 905
+    },
+    {
+      "scenario": "GraphQL N+1",
       "label": "GraphQL optimized (Join Monster)",
-      "responseTimeMs": 8.714,
+      "responseTimeMs": 16.423,
       "httpRequests": 1,
       "dbQueries": 1,
       "payloadBytes": 905

@@ -4,7 +4,13 @@ This module benchmarks equivalent data retrieval patterns with:
 
 - REST (Express)
 - GraphQL naive resolvers (N+1 behavior)
+- GraphQL resolvers optimized with DataLoader batching
 - GraphQL optimized with Join Monster
+
+The benchmark UI includes two screens:
+
+- Performance comparison for response time, DB queries, and payload size
+- CRUD playground for REST, GraphQL naive, GraphQL + DataLoader, and GraphQL + Join Monster
 
 The benchmark collects:
 
@@ -42,8 +48,10 @@ npm run benchmark:start
 1. Over-fetching comparison (REST vs optimized GraphQL)
 2. Under-fetching comparison (multi-request REST vs single GraphQL query)
 3. GraphQL N+1 comparison (naive resolvers vs Join Monster)
+4. GraphQL N+1 comparison with intermediate optimization (DataLoader)
 
 ## Notes
 
 - Uses the local SQLite dataset at `test-api/data/db/test1-data.sl3`.
 - New results are written to `benchmark/results/latest.json`.
+- GraphQL endpoints included in benchmark server: `/graphql-naive`, `/graphql-dataloader`, `/graphql-optimized`.

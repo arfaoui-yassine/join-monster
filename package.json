@@ -93,6 +93,7 @@
     "babel-plugin-idx": "^2.4.0",
     "babel-watch": "^7.0.0",
     "cors": "^2.8.5",
+    "dataloader": "^2.2.3",
     "dotenv": "8.2.0",
     "dotenv-expand": "^5.1.0",
     "eslint": "^8.1.0",

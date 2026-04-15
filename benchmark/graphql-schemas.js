@@ -5,6 +5,7 @@ import {
   GraphQLSchema,
   GraphQLString
 } from 'graphql'
+import DataLoader from 'dataloader'
 import joinMonster from '../src/index'
 import sqlite3Module from '../src/stringifiers/dialects/sqlite3'
 
@@ -179,6 +180,102 @@ export function createOptimizedSchema() {
             },
             options
           )
+        }
+      }
+    }
+  })
+
+  return new GraphQLSchema({ query: QueryType })
+}
+
+export function createDataLoaderContext(db, trackDbQuery) {
+  return {
+    db,
+    trackDbQuery,
+    loaders: {
+      postsByAuthorId: new DataLoader(async authorIds => {
+        trackDbQuery()
+        const rows = await db('posts')
+          .select('id', 'body', 'author_id')
+          .whereIn('author_id', authorIds)
+
+        const groups = new Map(authorIds.map(id => [id, []]))
+        for (const row of rows) {
+          if (groups.has(row.author_id)) {
+            groups.get(row.author_id).push(row)
+          }
+        }
+
+        return authorIds.map(id => groups.get(id) || [])
+      }),
+      commentsByPostId: new DataLoader(async postIds => {
+        trackDbQuery()
+        const rows = await db('comments')
+          .select('id', 'body', 'post_id')
+          .whereIn('post_id', postIds)
+
+        const groups = new Map(postIds.map(id => [id, []]))
+        for (const row of rows) {
+          if (groups.has(row.post_id)) {
+            groups.get(row.post_id).push(row)
+          }
+        }
+
+        return postIds.map(id => groups.get(id) || [])
+      })
+    }
+  }
+}
+
+export function createDataLoaderSchema() {
+  const CommentType = new GraphQLObjectType({
+    name: 'DataLoaderComment',
+    fields: {
+      id: { type: GraphQLInt },
+      body: { type: GraphQLString }
+    }
+  })
+
+  const PostType = new GraphQLObjectType({
+    name: 'DataLoaderPost',
+    fields: {
+      id: { type: GraphQLInt },
+      body: { type: GraphQLString },
+      comments: {
+        type: new GraphQLList(CommentType),
+        resolve: (post, args, context) => context.loaders.commentsByPostId.load(post.id)
+      }
+    }
+  })
+
+  const UserType = new GraphQLObjectType({
+    name: 'DataLoaderUser',
+    fields: {
+      id: { type: GraphQLInt },
+      fullName: { type: GraphQLString },
+      posts: {
+        type: new GraphQLList(PostType),
+        resolve: (user, args, context) => context.loaders.postsByAuthorId.load(user.id)
+      }
+    }
+  })
+
+  const QueryType = new GraphQLObjectType({
+    name: 'DataLoaderQuery',
+    fields: {
+      users: {
+        type: new GraphQLList(UserType),
+        args: {
+          limit: { type: GraphQLInt }
+        },
+        resolve: async (parent, args, context) => {
+          const limit = args.limit || 10
+          context.trackDbQuery()
+          const users = await context.db('accounts')
+            .select('id', 'first_name', 'last_name')
+            .orderBy('id', 'asc')
+            .limit(limit)
+          return users.map(toUser)
         }
       }
     }

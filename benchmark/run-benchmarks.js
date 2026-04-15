@@ -126,6 +126,12 @@ async function runNPlusOneScenario() {
     body: JSON.stringify({ query: QUERY_NESTED, variables: { limit: 10 } })
   })
 
+  const dataloader = await measuredFetch(`${BASE_URL}/graphql-dataloader`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query: QUERY_NESTED, variables: { limit: 10 } })
+  })
+
   const optimized = await measuredFetch(`${BASE_URL}/graphql-optimized`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -134,6 +140,7 @@ async function runNPlusOneScenario() {
 
   return [
     aggregate('GraphQL naive (N+1)', 'GraphQL N+1', [naive]),
+    aggregate('GraphQL + DataLoader', 'GraphQL N+1', [dataloader]),
     aggregate('GraphQL optimized (Join Monster)', 'GraphQL N+1', [optimized])
   ]
 }

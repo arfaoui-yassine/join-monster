@@ -63,6 +63,138 @@
         gap: 16px;
       }
 
+      .tabs {
+        display: inline-flex;
+        gap: 10px;
+        margin-top: 20px;
+        padding: 6px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.72);
+        box-shadow: 0 10px 22px rgba(15, 23, 42, 0.06);
+      }
+
+      .tab-button {
+        border: 0;
+        background: transparent;
+        color: #475569;
+        padding: 10px 16px;
+        border-radius: 999px;
+        font-family: inherit;
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+      .tab-button[aria-selected='true'] {
+        background: var(--ink);
+        color: white;
+      }
+
+      .view {
+        margin-top: 20px;
+      }
+
+      .hero-panel {
+        background: linear-gradient(135deg, rgba(255, 255, 255, 0.94), rgba(255, 243, 233, 0.92));
+        border: 1px solid var(--line);
+        border-radius: 22px;
+        padding: 18px;
+        box-shadow: 0 12px 24px rgba(15, 23, 42, 0.08);
+      }
+
+      .hero-panel p {
+        margin: 8px 0 0;
+        color: #334155;
+      }
+
+      .crud-grid {
+        margin-top: 16px;
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 16px;
+      }
+
+      .crud-card {
+        background: rgba(255, 255, 255, 0.88);
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        padding: 14px;
+        box-shadow: 0 12px 24px rgba(15, 23, 42, 0.08);
+      }
+
+      .crud-card h3 {
+        margin: 0;
+        font-size: 1rem;
+      }
+
+      .crud-card p {
+        margin: 8px 0 12px;
+        font-size: 0.9rem;
+        color: #475569;
+      }
+
+      .crud-actions {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+        margin-top: 12px;
+      }
+
+      .crud-actions button {
+        border: 0;
+        border-radius: 12px;
+        padding: 10px 12px;
+        background: #0f172a;
+        color: white;
+        font-family: inherit;
+        font-size: 0.85rem;
+        cursor: pointer;
+      }
+
+      .crud-actions button[data-action='read'] {
+        background: var(--secondary);
+      }
+
+      .crud-actions button[data-action='create'] {
+        background: var(--accent);
+      }
+
+      .crud-actions button[data-action='update'] {
+        background: #2563eb;
+      }
+
+      .crud-actions button[data-action='delete'] {
+        background: #b91c1c;
+      }
+
+      .crud-list {
+        margin-top: 12px;
+        padding: 0;
+        list-style: none;
+        display: grid;
+        gap: 6px;
+      }
+
+      .crud-list li {
+        padding: 8px 10px;
+        border-radius: 10px;
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        font-size: 0.84rem;
+      }
+
+      .crud-status {
+        margin-top: 12px;
+        padding: 10px 12px;
+        border-radius: 12px;
+        background: #0f172a;
+        color: white;
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 0.78rem;
+        white-space: pre-wrap;
+        min-height: 72px;
+      }
+
       .panel {
         background: rgba(255, 255, 255, 0.8);
         border: 1px solid var(--line);
@@ -156,7 +288,13 @@
       </p>
       <div class="meta" id="generatedAt">Loading benchmark data...</div>
 
-      <section class="grid">
+      <div class="tabs" role="tablist" aria-label="Benchmark views">
+        <button class="tab-button" data-view="overview" aria-selected="true" type="button">Performance</button>
+        <button class="tab-button" data-view="crud" aria-selected="false" type="button">CRUD</button>
+      </div>
+
+      <section class="view" id="overviewView">
+        <section class="grid">
         <article class="panel">
           <h2>Response Time (ms)</h2>
           <div class="chart-wrap"><canvas id="timeChart"></canvas></div>
@@ -169,24 +307,36 @@
           <h2>Payload Size (bytes)</h2>
           <div class="chart-wrap"><canvas id="payloadChart"></canvas></div>
         </article>
+        </section>
+
+        <div class="limit-note" id="limitNote"></div>
+
+        <section class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Scenario</th>
+                <th>Approach</th>
+                <th>Response Time</th>
+                <th>HTTP Requests</th>
+                <th>DB Queries</th>
+                <th>Payload</th>
+              </tr>
+            </thead>
+            <tbody id="metricsBody"></tbody>
+          </table>
+        </section>
       </section>
 
-      <div class="limit-note" id="limitNote"></div>
-
-      <section class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Scenario</th>
-              <th>Approach</th>
-              <th>Response Time</th>
-              <th>HTTP Requests</th>
-              <th>DB Queries</th>
-              <th>Payload</th>
-            </tr>
-          </thead>
-          <tbody id="metricsBody"></tbody>
-        </table>
+      <section class="view" id="crudView" hidden>
+        <div class="hero-panel">
+          <h2>CRUD Playground</h2>
+          <p>
+            Each card uses the same isolated demo table, but the backend path differs by approach.
+            Use the buttons to compare read, create, update, and delete behavior.
+          </p>
+        </div>
+        <div class="crud-grid" id="crudGrid"></div>
       </section>
     </main>
 
