@@ -1,25 +1,49 @@
 import { BrowserRouter, Routes, Route, NavLink, Link } from 'react-router-dom'
-import LandingPage from './pages/LandingPage'
-import ComparisonPage from './pages/ComparisonPage'
-import DataExplorerPage from './pages/DataExplorerPage'
-import PlaygroundPage from './pages/PlaygroundPage'
-import JourneyPage from './pages/JourneyPage'
+import { useState, useEffect } from 'react'
+import { useApi } from './hooks/useApi'
+import DashboardPage from './pages/DashboardPage'
+import CarsPage from './pages/CarsPage'
+import ReservationsPage from './pages/ReservationsPage'
+import CustomersPage from './pages/CustomersPage'
+import ReviewsPage from './pages/ReviewsPage'
+import LoginPage from './pages/LoginPage'
+import BenchmarkPage from './pages/BenchmarkPage'
 import './index.css'
 
 function Navbar() {
+  const { isAuthenticated, logout } = useApi()
+  const [loggedIn, setLoggedIn] = useState(isAuthenticated())
+
+  useEffect(() => {
+    const check = () => setLoggedIn(isAuthenticated())
+    window.addEventListener('storage', check)
+    window.addEventListener('auth-change', check)
+    return () => { window.removeEventListener('storage', check); window.removeEventListener('auth-change', check) }
+  }, [])
+
   return (
     <nav className="navbar">
       <div className="navbar-inner">
         <Link to="/" className="navbar-brand">
-          <span className="navbar-brand-icon">⚡</span>
-          <span>GraphQL Migration</span>
+          <span className="navbar-brand-icon">🚗</span>
+          <span>AutoLoc</span>
         </Link>
         <ul className="navbar-links">
-          <li><NavLink to="/" end className={({ isActive }) => `navbar-link ${isActive ? 'active' : ''}`}>🏠 Home</NavLink></li>
-          <li><NavLink to="/compare" className={({ isActive }) => `navbar-link ${isActive ? 'active' : ''}`}>📊 Compare</NavLink></li>
-          <li><NavLink to="/explorer" className={({ isActive }) => `navbar-link ${isActive ? 'active' : ''}`}>🗃️ Data Explorer</NavLink></li>
-          <li><NavLink to="/playground" className={({ isActive }) => `navbar-link ${isActive ? 'active' : ''}`}>🧪 Playground</NavLink></li>
-          <li><NavLink to="/journey" className={({ isActive }) => `navbar-link ${isActive ? 'active' : ''}`}>🎓 Journey</NavLink></li>
+          <li><NavLink to="/" end className={({ isActive }) => `navbar-link ${isActive ? 'active' : ''}`}>📊 Dashboard</NavLink></li>
+          <li><NavLink to="/cars" className={({ isActive }) => `navbar-link ${isActive ? 'active' : ''}`}>🚙 Cars</NavLink></li>
+          <li><NavLink to="/reservations" className={({ isActive }) => `navbar-link ${isActive ? 'active' : ''}`}>📅 Reservations</NavLink></li>
+          <li><NavLink to="/customers" className={({ isActive }) => `navbar-link ${isActive ? 'active' : ''}`}>👥 Customers</NavLink></li>
+          <li><NavLink to="/reviews" className={({ isActive }) => `navbar-link ${isActive ? 'active' : ''}`}>⭐ Reviews</NavLink></li>
+          <li><NavLink to="/benchmark" className={({ isActive }) => `navbar-link ${isActive ? 'active' : ''}`}>⚡ Benchmark</NavLink></li>
+          <li>
+            {loggedIn ? (
+              <button className="navbar-link" onClick={() => { logout(); setLoggedIn(false); window.dispatchEvent(new Event('auth-change')) }} style={{ border: 'none', cursor: 'pointer', background: 'none' }}>
+                🔓 Logout
+              </button>
+            ) : (
+              <NavLink to="/login" className={({ isActive }) => `navbar-link ${isActive ? 'active' : ''}`}>🔐 Login</NavLink>
+            )}
+          </li>
         </ul>
       </div>
     </nav>
@@ -31,11 +55,13 @@ function App() {
     <BrowserRouter>
       <Navbar />
       <Routes>
-        <Route path="/" element={<LandingPage />} />
-        <Route path="/compare" element={<ComparisonPage />} />
-        <Route path="/explorer" element={<DataExplorerPage />} />
-        <Route path="/playground" element={<PlaygroundPage />} />
-        <Route path="/journey" element={<JourneyPage />} />
+        <Route path="/" element={<DashboardPage />} />
+        <Route path="/cars" element={<CarsPage />} />
+        <Route path="/reservations" element={<ReservationsPage />} />
+        <Route path="/customers" element={<CustomersPage />} />
+        <Route path="/reviews" element={<ReviewsPage />} />
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/benchmark" element={<BenchmarkPage />} />
       </Routes>
     </BrowserRouter>
   )

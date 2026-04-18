@@ -1,78 +1,60 @@
 const API_BASE = ''
 
 export function useApi() {
+  let authToken = localStorage.getItem('cr_token')
 
-  async function fetchRest(endpoint) {
-    const start = performance.now()
-    const res = await fetch(`${API_BASE}/api/rest${endpoint}`)
-    const data = await res.json()
-    const elapsed = performance.now() - start
-    return {
-      ...data,
-      _meta: {
-        ...data._meta,
-        clientTimeMs: parseFloat(elapsed.toFixed(2))
-      }
-    }
+  function setToken(token) {
+    authToken = token
+    if (token) localStorage.setItem('cr_token', token)
+    else localStorage.removeItem('cr_token')
   }
 
-  async function fetchGraphQL(strategy, query, variables = {}) {
-    const urlMap = {
-      naive: '/api/graphql-naive',
-      dataloader: '/api/graphql-dataloader',
-      joinmonster: '/api/graphql-joinmonster'
-    }
-    const url = urlMap[strategy]
-    if (!url) throw new Error(`Unknown strategy: ${strategy}`)
+  function getToken() {
+    return authToken || localStorage.getItem('cr_token')
+  }
 
-    const start = performance.now()
-    const res = await fetch(`${API_BASE}${url}`, {
+  function isAuthenticated() {
+    return !!getToken()
+  }
+
+  async function gql(query, variables = {}) {
+    const headers = { 'Content-Type': 'application/json' }
+    const token = getToken()
+    if (token) headers['Authorization'] = `Bearer ${token}`
+
+    const res = await fetch(`${API_BASE}/car-rental/graphql`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({ query, variables })
     })
     const data = await res.json()
-    const elapsed = performance.now() - start
-
-    const queryCount = res.headers.get('X-Query-Count')
-    const execTime = res.headers.get('X-Execution-Time')
-    const sqlPreview = res.headers.get('X-SQL-Preview')
-
-    return {
-      ...data,
-      _meta: {
-        ...(data.extensions?._meta || {}),
-        queryCount: queryCount ? parseInt(queryCount) : data.extensions?._meta?.queryCount,
-        executionTimeMs: execTime ? parseFloat(execTime) : data.extensions?._meta?.executionTimeMs,
-        clientTimeMs: parseFloat(elapsed.toFixed(2)),
-        sql: sqlPreview ? atob(sqlPreview) : data.extensions?._meta?.sql || null
+    if (data.errors && data.errors.length > 0) {
+      // If auth error, clear token
+      if (data.errors[0].message.includes('Authentication required')) {
+        console.warn('Auth required')
       }
     }
+    return data
   }
 
-  async function compare(queryKey, customQuery = null) {
-    const res = await fetch(`${API_BASE}/api/compare`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ queryKey, customQuery })
-    })
-    return res.json()
-  }
+  async function login(clientId, clientSecret) {
+    const result = await gql(`
+      mutation Login($clientId: String!, $clientSecret: String!) {
+        login(clientId: $clientId, clientSecret: $clientSecret) {
+          token clientId name expiresIn
+        }
+      }
+    `, { clientId, clientSecret })
 
-  async function fetchQueries() {
-    const res = await fetch(`${API_BASE}/api/queries`)
-    return res.json()
-  }
-
-  async function restMutate(endpoint, method = 'POST', body = null) {
-    const opts = {
-      method,
-      headers: { 'Content-Type': 'application/json' }
+    if (result.data?.login?.token) {
+      setToken(result.data.login.token)
     }
-    if (body) opts.body = JSON.stringify(body)
-    const res = await fetch(`${API_BASE}/api/rest${endpoint}`, opts)
-    return res.json()
+    return result
   }
 
-  return { fetchRest, fetchGraphQL, compare, fetchQueries, restMutate }
+  function logout() {
+    setToken(null)
+  }
+
+  return { gql, login, logout, isAuthenticated, getToken, setToken }
 }

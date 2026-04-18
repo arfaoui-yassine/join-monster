@@ -1,27 +1,149 @@
 
+import http from 'http'
 import path from 'path'
 import express from 'express'
 import cors from 'cors'
+import { WebSocketServer } from 'ws'
+import { useServer } from 'graphql-ws/use/ws'
 
 import { createHandler } from 'graphql-http/lib/use/express'
 import { graphql } from 'graphql'
 
 import schemaBasic from './schema-basic/index'
 import schemaRelay from './schema-paginated/index'
-import { schema as schemaNaive, createQueryTracker as createNaiveTracker } from './schema-naive/index'
-import { schema as schemaDataloader, createLoaders, createQueryTracker as createDLTracker } from './schema-dataloader/index'
-import restRoutes from './rest-routes'
-import dbCall from './data/fetch'
-import knex from './data/database'
-
-import joinMonster from '../src/index'
+import { carRentalSchema } from './car-rental/schema'
+import { authMiddleware } from './car-rental/auth'
+import { resolveNaive, resolveDataLoader, resolveJoinMonster, runAllBenchmarks } from './car-rental/benchmark'
 
 const app = express()
 
 app.use(cors())
 app.use(express.json())
 
-// ============ EXISTING GRAPHIQL PAGES ============
+// ============ CAR RENTAL GRAPHQL API ============
+
+// Auth middleware for car rental
+app.use('/car-rental', authMiddleware)
+
+// GraphiQL interface for car rental
+app.get('/car-rental', (req, res) => {
+  res.send(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>Car Rental GraphQL API</title>
+      <style>
+        body { height: 100vh; margin: 0; overflow: hidden; }
+        #graphiql { height: 100vh; }
+      </style>
+      <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+      <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+      <link rel="stylesheet" href="https://unpkg.com/graphiql@3/graphiql.min.css" />
+      <script crossorigin src="https://unpkg.com/graphiql@3/graphiql.min.js"></script>
+    </head>
+    <body>
+      <div id="graphiql"></div>
+      <script>
+        const fetcher = GraphiQL.createFetcher({
+          url: '/car-rental/graphql',
+          headers: { 'Content-Type': 'application/json' },
+          wsUrl: 'ws://localhost:3000/car-rental/subscriptions'
+        });
+        ReactDOM.render(
+          React.createElement(GraphiQL, {
+            fetcher,
+            defaultQuery: \`# Car Rental GraphQL API
+# Try these queries:
+
+# 1. Get dashboard stats
+query Stats {
+  stats {
+    totalCars
+    availableCars
+    totalCustomers
+    activeReservations
+    totalRevenue
+    averageRating
+  }
+}
+
+# 2. Browse cars with filters  
+# query Cars {
+#   cars(limit: 5, filter: { category_id: 4, available: true }) {
+#     id brand model year
+#     price_per_day color
+#     category { name }
+#     agency { name city }
+#     averageRating
+#   }
+# }
+
+# 3. Login (get JWT token for mutations)
+# mutation Login {
+#   login(clientId: "carrental-app", clientSecret: "cr-secret-2024") {
+#     token
+#     expiresIn
+#   }
+# }
+\`
+          }),
+          document.getElementById('graphiql')
+        );
+      </script>
+    </body>
+    </html>
+  `)
+})
+
+// Car rental GraphQL HTTP endpoint
+app.post('/car-rental/graphql', async (req, res) => {
+  try {
+    const { query, variables, operationName } = req.body
+    const result = await graphql({
+      schema: carRentalSchema,
+      source: query,
+      variableValues: variables,
+      operationName,
+      contextValue: { auth: req.auth }
+    })
+    res.json(result)
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ errors: [{ message: err.message }] })
+  }
+})
+// Performance Benchmark endpoint
+app.get('/car-rental/benchmark', async (req, res) => {
+  try {
+    console.log('🏁 Running performance benchmark...')
+    const naive = await resolveNaive()
+    const dataloader = await resolveDataLoader()
+    const joinmonster = await resolveJoinMonster()
+    console.log(`✅ Benchmark done: Naive=${naive.duration.toFixed(0)}ms, DL=${dataloader.duration.toFixed(0)}ms, JM=${joinmonster.duration.toFixed(0)}ms`)
+    res.json({ naive, dataloader, joinmonster, timestamp: new Date().toISOString() })
+  } catch (err) {
+    console.error('Benchmark error:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// Multi-scenario benchmark endpoint
+app.get('/car-rental/benchmark/all', async (req, res) => {
+  try {
+    console.log('🏁 Running multi-scenario benchmark...')
+    const scenarios = await runAllBenchmarks()
+    scenarios.forEach(s => {
+      console.log(`  ${s.icon} ${s.name}: N=${s.naive.duration.toFixed(0)}ms DL=${s.dataloader.duration.toFixed(0)}ms JM=${s.joinmonster.duration.toFixed(0)}ms`)
+    })
+    console.log('✅ All benchmarks complete')
+    res.json({ scenarios, timestamp: new Date().toISOString() })
+  } catch (err) {
+    console.error('Benchmark error:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// ============ EXISTING GRAPHQL ENDPOINTS ============
 
 app.get('/graphql', (req, res) => {
   res.sendFile(path.join(__dirname, 'graphsiql', 'index.html'))
@@ -30,8 +152,6 @@ app.get('/graphql', (req, res) => {
 app.get('/graphql-relay', (req, res) => {
   res.sendFile(path.join(__dirname, 'graphsiql', 'index.html'))
 })
-
-// ============ EXISTING JOIN MONSTER ENDPOINTS ============
 
 app.post(
   '/graphql',
@@ -56,262 +176,57 @@ app.post(
   })
 )
 
-// ============ REST API ============
-
-app.use('/api/rest', restRoutes)
-
-// ============ NAIVE GRAPHQL (N+1) ============
-
-app.post('/api/graphql-naive', async (req, res) => {
-  try {
-    const tracker = createNaiveTracker()
-    const { query, variables } = req.body
-
-    const result = await graphql({
-      schema: schemaNaive,
-      source: query,
-      variableValues: variables,
-      contextValue: { tracker }
-    })
-
-    const queryCount = tracker.getCount()
-    const executionTimeMs = parseFloat(tracker.getElapsed().toFixed(2))
-
-    res.set('X-Query-Count', String(queryCount))
-    res.set('X-Execution-Time', String(executionTimeMs))
-    res.set('Access-Control-Expose-Headers', 'X-Query-Count, X-Execution-Time')
-
-    res.json({
-      ...result,
-      extensions: {
-        ...(result.extensions || {}),
-        _meta: {
-          strategy: 'Naive GraphQL',
-          queryCount,
-          executionTimeMs
-        }
-      }
-    })
-  } catch (err) {
-    console.error(err)
-    res.status(500).json({ errors: [{ message: err.message }] })
-  }
-})
-
-// ============ DATALOADER GRAPHQL ============
-
-app.post('/api/graphql-dataloader', async (req, res) => {
-  try {
-    const tracker = createDLTracker()
-    const loaders = createLoaders(tracker)
-    const { query, variables } = req.body
-
-    const result = await graphql({
-      schema: schemaDataloader,
-      source: query,
-      variableValues: variables,
-      contextValue: { tracker, loaders }
-    })
-
-    const queryCount = tracker.getCount()
-    const executionTimeMs = parseFloat(tracker.getElapsed().toFixed(2))
-
-    res.set('X-Query-Count', String(queryCount))
-    res.set('X-Execution-Time', String(executionTimeMs))
-    res.set('Access-Control-Expose-Headers', 'X-Query-Count, X-Execution-Time')
-
-    res.json({
-      ...result,
-      extensions: {
-        ...(result.extensions || {}),
-        _meta: {
-          strategy: 'DataLoader GraphQL',
-          queryCount,
-          executionTimeMs
-        }
-      }
-    })
-  } catch (err) {
-    console.error(err)
-    res.status(500).json({ errors: [{ message: err.message }] })
-  }
-})
-
-// ============ JOIN MONSTER API (with metrics) ============
-
-app.post('/api/graphql-joinmonster', async (req, res) => {
-  try {
-    const start = process.hrtime.bigint()
-    let queryCount = 0
-    const { query, variables } = req.body
-    let capturedSql = ''
-
-    const result = await graphql({
-      schema: schemaBasic,
-      source: query,
-      variableValues: variables,
-      contextValue: {
-        res,
-        capturedSql: '',
-      }
-    })
-
-    // Extract SQL from response header if set by dbCall
-    capturedSql = res.getHeader('X-SQL-Preview')
-    if (capturedSql) {
-      try { capturedSql = atob(capturedSql) } catch(e) { /* ignore */ }
-    }
-
-    const end = process.hrtime.bigint()
-    const executionTimeMs = parseFloat((Number(end - start) / 1e6).toFixed(2))
-
-    // Join Monster typically does 1-2 queries
-    queryCount = capturedSql ? (capturedSql.split('SELECT').length - 1) || 1 : 1
-
-    res.set('X-Query-Count', String(queryCount))
-    res.set('X-Execution-Time', String(executionTimeMs))
-    res.set('Access-Control-Expose-Headers', 'X-Query-Count, X-Execution-Time, X-SQL-Preview')
-
-    res.json({
-      ...result,
-      extensions: {
-        ...(result.extensions || {}),
-        _meta: {
-          strategy: 'Join Monster',
-          queryCount,
-          executionTimeMs,
-          sql: capturedSql || null
-        }
-      }
-    })
-  } catch (err) {
-    console.error(err)
-    res.status(500).json({ errors: [{ message: err.message }] })
-  }
-})
-
-// ============ COMPARISON ENDPOINT ============
-
-const PREDEFINED_QUERIES = {
-  'users-basic': {
-    name: 'List Users (basic)',
-    graphql: '{ users { id fullName email_address } }',
-    description: 'Simple flat query - no nesting'
-  },
-  'users-with-posts': {
-    name: 'Users with Posts',
-    graphql: '{ users { id fullName posts { id body } } }',
-    description: 'One level of nesting - triggers N+1 in naive'
-  },
-  'users-deep': {
-    name: 'Users → Posts → Comments → Author',
-    graphql: '{ users { id fullName posts { id body comments { id body author { id fullName } } } } }',
-    description: 'Deep nesting - maximum N+1 impact'
-  },
-  'single-user-deep': {
-    name: 'Single User Deep',
-    graphql: '{ user(id: 1) { id fullName posts { id body comments { id body author { id fullName } } } following { id fullName } } }',
-    description: 'Single user with all relations'
-  },
-  'all-posts': {
-    name: 'All Posts with Authors & Comments',
-    graphql: '{ posts { id body author { id fullName } comments { id body author { fullName } } } }',
-    description: 'All posts with nested relations'
-  }
-}
-
-app.get('/api/queries', (req, res) => {
-  res.json(PREDEFINED_QUERIES)
-})
-
-app.post('/api/compare', async (req, res) => {
-  try {
-    const { queryKey, customQuery } = req.body
-    const gqlQuery = customQuery || (PREDEFINED_QUERIES[queryKey] && PREDEFINED_QUERIES[queryKey].graphql)
-
-    if (!gqlQuery) {
-      return res.status(400).json({ error: 'Provide queryKey or customQuery' })
-    }
-
-    const results = {}
-
-    // 1. Naive GraphQL
-    const naiveTracker = createNaiveTracker()
-    const naiveResult = await graphql({
-      schema: schemaNaive,
-      source: gqlQuery,
-      contextValue: { tracker: naiveTracker }
-    })
-    results.naive = {
-      strategy: 'Naive GraphQL',
-      data: naiveResult.data,
-      errors: naiveResult.errors || null,
-      queryCount: naiveTracker.getCount(),
-      executionTimeMs: parseFloat(naiveTracker.getElapsed().toFixed(2))
-    }
-
-    // 2. DataLoader GraphQL
-    const dlTracker = createDLTracker()
-    const dlLoaders = createLoaders(dlTracker)
-    const dlResult = await graphql({
-      schema: schemaDataloader,
-      source: gqlQuery,
-      contextValue: { tracker: dlTracker, loaders: dlLoaders }
-    })
-    results.dataloader = {
-      strategy: 'DataLoader GraphQL',
-      data: dlResult.data,
-      errors: dlResult.errors || null,
-      queryCount: dlTracker.getCount(),
-      executionTimeMs: parseFloat(dlTracker.getElapsed().toFixed(2))
-    }
-
-    // 3. Join Monster GraphQL
-    const jmStart = process.hrtime.bigint()
-    const jmResult = await graphql({
-      schema: schemaBasic,
-      source: gqlQuery,
-      contextValue: { capturedSql: '' }
-    })
-    const jmEnd = process.hrtime.bigint()
-    const jmTime = parseFloat((Number(jmEnd - jmStart) / 1e6).toFixed(2))
-    results.joinmonster = {
-      strategy: 'Join Monster',
-      data: jmResult.data,
-      errors: jmResult.errors || null,
-      queryCount: 1,
-      executionTimeMs: jmTime
-    }
-
-    res.json({
-      query: gqlQuery,
-      results
-    })
-  } catch (err) {
-    console.error(err)
-    res.status(500).json({ error: err.message })
-  }
-})
-
-// ============ SERVE FRONTEND (production) ============
+// ============ SERVE FRONTEND ============
 
 app.use(express.static(path.join(__dirname, '..', 'frontend', 'dist')))
-app.get('/app', (req, res) => {
-  res.sendFile(path.join(__dirname, '..', 'frontend', 'dist', 'index.html'))
-})
-app.get('/app/*', (req, res) => {
+
+// SPA fallback — serve index.html for all unmatched routes
+app.get('*', (req, res) => {
+  // Don't serve index.html for API/graphql routes
+  if (req.path.startsWith('/api/') || req.path.startsWith('/graphql')) {
+    return res.status(404).json({ error: 'Not found' })
+  }
   res.sendFile(path.join(__dirname, '..', 'frontend', 'dist', 'index.html'))
 })
 
-app.listen(3000, () =>
-  console.log(
-    'server listening at http://localhost:3000/graphql and http://localhost:3000/graphql-relay\n' +
-    'Demo frontend: http://localhost:3000/app (production build) or http://localhost:5173 (dev)\n' +
-    'API endpoints:\n' +
-    '  REST:       /api/rest/*\n' +
-    '  Naive GQL:  /api/graphql-naive\n' +
-    '  DataLoader: /api/graphql-dataloader\n' +
-    '  JoinMonster:/api/graphql-joinmonster\n' +
-    '  Compare:    /api/compare'
-  )
+// ============ HTTP + WEBSOCKET SERVER ============
+
+const server = http.createServer(app)
+
+// WebSocket server for GraphQL subscriptions
+const wsServer = new WebSocketServer({
+  server,
+  path: '/car-rental/subscriptions'
+})
+
+useServer(
+  {
+    schema: carRentalSchema,
+    context: (ctx) => {
+      // Extract auth from connection params if provided
+      return { auth: ctx.connectionParams?.auth || null }
+    }
+  },
+  wsServer
+)
+
+const PORT = process.env.PORT || 3000
+
+server.listen(PORT, () =>
+  console.log(`
+╔══════════════════════════════════════════════════════╗
+║         🚗 Car Rental GraphQL API Server            ║
+╠══════════════════════════════════════════════════════╣
+║                                                      ║
+║  GraphQL API:    http://localhost:${PORT}/car-rental/graphql ║
+║  GraphiQL:       http://localhost:${PORT}/car-rental        ║
+║  Subscriptions:  ws://localhost:${PORT}/car-rental/subscriptions ║
+║                                                      ║
+║  Frontend:       http://localhost:${PORT}/               ║
+║  Frontend Dev:   http://localhost:5173/               ║
+║                                                      ║
+║  Join Monster:   http://localhost:${PORT}/graphql         ║
+║                                                      ║
+╚══════════════════════════════════════════════════════╝
+  `)
 )

@@ -119,7 +119,11 @@
     "debug": "^4.1.0",
     "deprecate": "^1.0.0",
     "generatorics": "^1.0.8",
-    "graphql-relay": "^0.10.0"
+    "graphql-relay": "^0.10.0",
+    "graphql-ws": "^6.0.8",
+    "jsonwebtoken": "^9.0.3",
+    "mysql2": "^3.22.0",
+    "ws": "^8.20.0"
   },
   "overrides": {
     "@stem/nesthydrationjs": {
